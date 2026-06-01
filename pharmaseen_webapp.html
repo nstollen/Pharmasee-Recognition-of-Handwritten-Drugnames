@@ -1,0 +1,1139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PharmaSeen — Prescription Drug Recognition</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #0a0a0f;
+    --bg2:       #111118;
+    --bg3:       #1a1a24;
+    --border:    rgba(255,255,255,0.08);
+    --border2:   rgba(255,255,255,0.14);
+    --text:      #f0eeff;
+    --text2:     #9b97b8;
+    --text3:     #5a5780;
+    --accent:    #7c5cfc;
+    --accent2:   #a98ffe;
+    --accent-lt: rgba(124,92,252,0.15);
+    --green:     #22c55e;
+    --green-lt:  rgba(34,197,94,0.12);
+    --amber:     #f59e0b;
+    --amber-lt:  rgba(245,158,11,0.12);
+    --red:       #ef4444;
+    --red-lt:    rgba(239,68,68,0.12);
+    --cyan:      #06b6d4;
+    --cyan-lt:   rgba(6,182,212,0.10);
+    --radius:    12px;
+    --radius-lg: 20px;
+  }
+
+  *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── NOISE OVERLAY ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 9999;
+    opacity: .5;
+  }
+
+  /* ── GLOW ORBS ── */
+  .orb {
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(120px);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .orb-1 { width:600px; height:600px; background:rgba(124,92,252,0.12); top:-200px; right:-100px; }
+  .orb-2 { width:400px; height:400px; background:rgba(6,182,212,0.08); bottom:-100px; left:-100px; }
+
+  /* ── LAYOUT ── */
+  .app { position:relative; z-index:1; max-width:1100px; margin:0 auto; padding:0 24px 80px; }
+
+  /* ── HEADER ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 32px 0 48px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 48px;
+  }
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .logo-icon {
+    width: 40px; height: 40px;
+    background: var(--accent);
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+  }
+  .logo-text {
+    font-family: 'Instrument Serif', serif;
+    font-size: 22px;
+    letter-spacing: -.02em;
+  }
+  .logo-text span { color: var(--accent2); font-style: italic; }
+  .badge {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: .08em;
+    color: var(--accent2);
+    background: var(--accent-lt);
+    border: 1px solid rgba(124,92,252,0.3);
+    padding: 6px 12px;
+    border-radius: 20px;
+  }
+
+  /* ── HERO ── */
+  .hero {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 48px;
+    margin-bottom: 48px;
+    align-items: start;
+  }
+  .hero-left h1 {
+    font-family: 'Instrument Serif', serif;
+    font-size: 52px;
+    line-height: 1.05;
+    letter-spacing: -.03em;
+    margin-bottom: 16px;
+  }
+  .hero-left h1 em {
+    font-style: italic;
+    color: var(--accent2);
+  }
+  .hero-left p {
+    color: var(--text2);
+    font-size: 15px;
+    line-height: 1.7;
+    margin-bottom: 28px;
+  }
+
+  /* ── METRICS BAR ── */
+  .metrics-bar {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .metric-pill {
+    display: flex;
+    flex-direction: column;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    min-width: 100px;
+  }
+  .metric-pill .val {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 20px;
+    font-weight: 500;
+    color: var(--accent2);
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .metric-pill .lbl {
+    font-size: 11px;
+    color: var(--text3);
+    letter-spacing: .04em;
+  }
+
+  /* ── UPLOAD CARD ── */
+  .upload-card {
+    background: var(--bg2);
+    border: 1.5px dashed var(--border2);
+    border-radius: var(--radius-lg);
+    padding: 40px 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .2s, background .2s;
+    position: relative;
+    overflow: hidden;
+  }
+  .upload-card:hover {
+    border-color: var(--accent);
+    background: var(--bg3);
+  }
+  .upload-card.drag-over {
+    border-color: var(--accent);
+    background: var(--accent-lt);
+  }
+  .upload-icon {
+    width: 56px; height: 56px;
+    background: var(--accent-lt);
+    border: 1px solid rgba(124,92,252,0.3);
+    border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 16px;
+    font-size: 24px;
+  }
+  .upload-card h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  .upload-card p {
+    font-size: 13px;
+    color: var(--text3);
+    margin-bottom: 20px;
+  }
+  .upload-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 20px;
+    font-family: 'Syne', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity .2s, transform .1s;
+  }
+  .upload-btn:hover { opacity: .9; transform: translateY(-1px); }
+  .upload-btn:active { transform: translateY(0); }
+  #file-input { display: none; }
+
+  /* ── PREVIEW ── */
+  #preview-container {
+    display: none;
+    margin-top: 16px;
+    position: relative;
+  }
+  #preview-img {
+    width: 100%;
+    max-height: 180px;
+    object-fit: contain;
+    border-radius: 8px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+  }
+  .preview-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--text3);
+    margin-top: 8px;
+    text-align: left;
+  }
+
+  /* ── ANALYZE BUTTON ── */
+  #analyze-btn {
+    display: none;
+    width: 100%;
+    margin-top: 16px;
+    background: linear-gradient(135deg, var(--accent) 0%, #5b21f4 100%);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    padding: 14px;
+    font-family: 'Syne', sans-serif;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: opacity .2s, transform .15s;
+    letter-spacing: .02em;
+  }
+  #analyze-btn:hover { opacity: .92; transform: translateY(-2px); }
+  #analyze-btn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+  /* ── RESULTS SECTION ── */
+  #results-section { display: none; }
+
+  .results-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 20px;
+  }
+
+  .result-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    position: relative;
+    overflow: hidden;
+  }
+  .result-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+  }
+  .card-accepted::before { background: var(--green); }
+  .card-uncertain::before { background: var(--amber); }
+  .card-confirmed::before { background: var(--cyan); }
+  .card-info::before { background: var(--accent); }
+
+  .card-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--text3);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card-label .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .dot-green { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .dot-amber { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+  .dot-cyan  { background: var(--cyan);  box-shadow: 0 0 6px var(--cyan); }
+  .dot-accent{ background: var(--accent2); box-shadow: 0 0 6px var(--accent2); }
+
+  .drug-name {
+    font-family: 'Instrument Serif', serif;
+    font-size: 28px;
+    letter-spacing: -.02em;
+    line-height: 1.1;
+    margin-bottom: 6px;
+    word-break: break-word;
+  }
+  .drug-name.accepted { color: #fff; }
+  .drug-name.uncertain { color: var(--amber); }
+
+  .rxcui-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    background: var(--cyan-lt);
+    color: var(--cyan);
+    border: 1px solid rgba(6,182,212,0.2);
+    padding: 4px 10px;
+    border-radius: 20px;
+    margin-top: 8px;
+  }
+
+  /* ── CONFIDENCE BAR ── */
+  .conf-section { margin-top: 16px; }
+  .conf-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--text3);
+    margin-bottom: 6px;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  .conf-val { color: var(--text2); font-weight: 500; }
+  .conf-bar-bg {
+    height: 6px;
+    background: var(--bg3);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .conf-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    transition: width 1s cubic-bezier(.4,0,.2,1);
+    width: 0%;
+  }
+
+  /* ── STATUS CHIP ── */
+  .status-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 5px 12px;
+    border-radius: 20px;
+    margin-top: 12px;
+    font-family: 'IBM Plex Mono', monospace;
+    letter-spacing: .04em;
+  }
+  .chip-accepted  { background: var(--green-lt); color: var(--green); border: 1px solid rgba(34,197,94,0.2); }
+  .chip-uncertain { background: var(--amber-lt); color: var(--amber); border: 1px solid rgba(245,158,11,0.2); }
+  .chip-confirmed { background: var(--cyan-lt);  color: var(--cyan);  border: 1px solid rgba(6,182,212,0.2); }
+  .chip-unconfirmed { background: var(--red-lt); color: var(--red);   border: 1px solid rgba(239,68,68,0.2); }
+
+  /* ── TOP CANDIDATES ── */
+  .candidates-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    margin-bottom: 20px;
+  }
+  .candidates-card h4 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text2);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .candidate-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .candidate-row:last-child { border-bottom: none; }
+  .cand-rank {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--text3);
+    width: 20px;
+    flex-shrink: 0;
+  }
+  .cand-name {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 500;
+    text-transform: capitalize;
+  }
+  .cand-name.top { color: var(--accent2); }
+  .cand-bar-bg {
+    width: 120px;
+    height: 4px;
+    background: var(--bg3);
+    border-radius: 2px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .cand-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--accent);
+    transition: width 1.2s cubic-bezier(.4,0,.2,1);
+    width: 0%;
+  }
+  .cand-pct {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--text3);
+    width: 42px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  /* ── PIPELINE TRACE ── */
+  .pipeline-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    margin-bottom: 20px;
+  }
+  .pipeline-card h4 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text2);
+    margin-bottom: 16px;
+  }
+  .pipeline-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+  .pipeline-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 10px 0;
+    position: relative;
+    opacity: 0;
+    transform: translateX(-10px);
+    transition: opacity .4s, transform .4s;
+  }
+  .pipeline-step.visible { opacity:1; transform:none; }
+  .step-icon {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .step-icon.done { background: var(--green-lt); }
+  .step-content { flex: 1; }
+  .step-name {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+  .step-detail {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--text3);
+  }
+  .step-connector {
+    width: 2px;
+    height: 12px;
+    background: var(--border2);
+    margin-left: 15px;
+  }
+
+  /* ── LOADING ── */
+  #loading-section {
+    display: none;
+    text-align: center;
+    padding: 60px 0;
+  }
+  .spinner {
+    width: 48px; height: 48px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+    margin: 0 auto 20px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    color: var(--text3);
+  }
+  .loading-steps { margin-top: 16px; }
+  .loading-step {
+    font-size: 12px;
+    color: var(--text3);
+    padding: 4px 0;
+    transition: color .3s;
+  }
+  .loading-step.active { color: var(--accent2); }
+  .loading-step.done   { color: var(--green); }
+
+  /* ── RESET ── */
+  #reset-btn {
+    display: none;
+    margin-top: 8px;
+    background: transparent;
+    border: 1px solid var(--border2);
+    color: var(--text2);
+    border-radius: 8px;
+    padding: 10px 20px;
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    cursor: pointer;
+    transition: border-color .2s, color .2s;
+  }
+  #reset-btn:hover { border-color: var(--accent); color: var(--accent2); }
+
+  /* ── FOOTER ── */
+  footer {
+    margin-top: 80px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--text3);
+    letter-spacing: .04em;
+  }
+
+  /* ── DEMO NOTE ── */
+  .demo-note {
+    background: var(--amber-lt);
+    border: 1px solid rgba(245,158,11,0.2);
+    border-radius: 10px;
+    padding: 12px 16px;
+    font-size: 12px;
+    color: var(--amber);
+    margin-bottom: 20px;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 700px) {
+    .hero { grid-template-columns: 1fr; }
+    .results-grid { grid-template-columns: 1fr; }
+    .hero-left h1 { font-size: 36px; }
+  }
+</style>
+</head>
+<body>
+<div class="orb orb-1"></div>
+<div class="orb orb-2"></div>
+
+<div class="app">
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo">
+      <div class="logo-icon">💊</div>
+      <div class="logo-text">Pharma<span>Seen</span></div>
+    </div>
+    <div class="badge">PROOF OF CONCEPT · TGL RESEARCH</div>
+  </header>
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="hero-left">
+      <h1>Handwritten<br><em>Prescription</em><br>Recognition</h1>
+      <p>Upload a segmented prescription word image to identify the generic drug name using a ResNet18 deep learning classifier validated against the RxNorm pharmaceutical database.</p>
+      <div class="metrics-bar">
+        <div class="metric-pill">
+          <span class="val">86.78%</span>
+          <span class="lbl">EXACT MATCH</span>
+        </div>
+        <div class="metric-pill">
+          <span class="val">7.13%</span>
+          <span class="lbl">CHAR ERROR</span>
+        </div>
+        <div class="metric-pill">
+          <span class="val">0.9292</span>
+          <span class="lbl">F1 SCORE</span>
+        </div>
+        <div class="metric-pill">
+          <span class="val">393</span>
+          <span class="lbl">DRUG CLASSES</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="hero-right">
+      <!-- UPLOAD -->
+      <div class="upload-card" id="upload-card">
+        <div class="upload-icon">📋</div>
+        <h3>Upload Prescription Image</h3>
+        <p>PNG or JPG · Single drug name word image<br>Recommended: segmented word crop</p>
+        <button class="upload-btn" onclick="document.getElementById('file-input').click()">
+          ↑ Choose Image
+        </button>
+        <input type="file" id="file-input" accept="image/png,image/jpg,image/jpeg">
+        <div id="preview-container">
+          <img id="preview-img" src="" alt="Preview">
+          <div class="preview-label" id="preview-label"></div>
+        </div>
+      </div>
+
+      <button id="analyze-btn" onclick="runAnalysis()">
+        Analyze Prescription →
+      </button>
+      <button id="reset-btn" onclick="resetApp()">
+        ← Analyze Another Image
+      </button>
+    </div>
+  </div>
+
+  <!-- DEMO NOTE -->
+  <div class="demo-note" id="demo-note" style="display:none">
+    ⚠️ <span><strong>Demo mode:</strong> This is a simulated result for UI demonstration. In the real deployment, the uploaded image is processed by the trained ResNet18 model running locally via a Python backend API.</span>
+  </div>
+
+  <!-- LOADING -->
+  <div id="loading-section">
+    <div class="spinner"></div>
+    <div class="loading-text">Processing prescription image...</div>
+    <div class="loading-steps">
+      <div class="loading-step" id="ls-1">① Preprocessing image (grayscale · bilateral filter · 224×224)</div>
+      <div class="loading-step" id="ls-2">② ResNet18 feature extraction</div>
+      <div class="loading-step" id="ls-3">③ Softmax classification → Top-5 candidates</div>
+      <div class="loading-step" id="ls-4">④ Confidence threshold evaluation</div>
+      <div class="loading-step" id="ls-5">⑤ RxNorm API validation</div>
+    </div>
+  </div>
+
+  <!-- RESULTS -->
+  <div id="results-section">
+
+    <div class="results-grid">
+      <!-- PREDICTION CARD -->
+      <div class="result-card card-accepted" id="pred-card">
+        <div class="card-label">
+          <span class="dot dot-green"></span>
+          Predicted Drug Name
+        </div>
+        <div class="drug-name accepted" id="pred-drug-name">—</div>
+        <div id="rxcui-badge-container"></div>
+        <div id="pred-status-chip"></div>
+        <div class="conf-section">
+          <div class="conf-header">
+            <span>Confidence Score</span>
+            <span class="conf-val" id="conf-val-text">—</span>
+          </div>
+          <div class="conf-bar-bg">
+            <div class="conf-bar-fill" id="conf-bar"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- VALIDATION CARD -->
+      <div class="result-card card-confirmed" id="val-card">
+        <div class="card-label">
+          <span class="dot dot-cyan"></span>
+          Validation Status
+        </div>
+        <div style="margin-bottom:12px">
+          <div style="font-size:12px;color:var(--text3);margin-bottom:6px;font-family:'IBM Plex Mono',monospace;">THRESHOLD</div>
+          <div id="threshold-chip"></div>
+        </div>
+        <div style="margin-bottom:12px">
+          <div style="font-size:12px;color:var(--text3);margin-bottom:6px;font-family:'IBM Plex Mono',monospace;">RXNORM API</div>
+          <div id="rxnorm-chip"></div>
+        </div>
+        <div>
+          <div style="font-size:12px;color:var(--text3);margin-bottom:4px;font-family:'IBM Plex Mono',monospace;">CANONICAL NAME</div>
+          <div id="canonical-name" style="font-size:15px;font-weight:600;color:var(--text)">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TOP CANDIDATES -->
+    <div class="candidates-card">
+      <h4>🏆 Top-5 Model Predictions</h4>
+      <div id="candidates-list"></div>
+    </div>
+
+    <!-- PIPELINE TRACE -->
+    <div class="pipeline-card">
+      <h4>⚙️ Pipeline Execution Trace</h4>
+      <div class="pipeline-steps" id="pipeline-steps"></div>
+    </div>
+
+  </div>
+
+  <footer>
+    <span>PharmaSeen · TGL Research Group · 2025</span>
+    <span>ResNet18 + ImageNet Transfer Learning · PyTorch</span>
+  </footer>
+
+</div>
+
+<script>
+// ── Demo drug database (simulates model output) ──────────────────────
+const DEMO_DRUGS = [
+  {
+    name: "Amoxicillin",
+    candidates: [
+      { name: "Amoxicillin", prob: 0.9412 },
+      { name: "Amoxicillin Trihydrate", prob: 0.0312 },
+      { name: "Ampicillin", prob: 0.0148 },
+      { name: "Amoxapine", prob: 0.0081 },
+      { name: "Amlodipine", prob: 0.0047 }
+    ],
+    rxcui: "723",
+    rxnorm_status: "CONFIRMED",
+    threshold_status: "ACCEPTED"
+  },
+  {
+    name: "Metformin",
+    candidates: [
+      { name: "Metformin", prob: 0.8821 },
+      { name: "Metformin Hydrochloride", prob: 0.0743 },
+      { name: "Metoprolol", prob: 0.0218 },
+      { name: "Metronidazole", prob: 0.0134 },
+      { name: "Metolazone", prob: 0.0084 }
+    ],
+    rxcui: "6809",
+    rxnorm_status: "CONFIRMED",
+    threshold_status: "ACCEPTED"
+  },
+  {
+    name: "Paracetamol",
+    candidates: [
+      { name: "Paracetamol", prob: 0.7634 },
+      { name: "Acetaminophen", prob: 0.1821 },
+      { name: "Propacetamol", prob: 0.0312 },
+      { name: "Phenacetin", prob: 0.0148 },
+      { name: "Aspirin", prob: 0.0085 }
+    ],
+    rxcui: "161",
+    rxnorm_status: "CONFIRMED",
+    threshold_status: "ACCEPTED"
+  },
+  {
+    name: "Codeine",
+    candidates: [
+      { name: "Codeine", prob: 0.6234 },
+      { name: "Codeine Phosphate", prob: 0.2341 },
+      { name: "Cocaine", prob: 0.0812 },
+      { name: "Codeine-N-Oxide", prob: 0.0421 },
+      { name: "Morphine", prob: 0.0192 }
+    ],
+    rxcui: "2670",
+    rxnorm_status: "CONFIRMED",
+    threshold_status: "ACCEPTED"
+  },
+  {
+    name: "Warfarin",
+    candidates: [
+      { name: "Warfarin", prob: 0.5123 },
+      { name: "Warfarin Sodium", prob: 0.3412 },
+      { name: "Phenprocoumon", prob: 0.0821 },
+      { name: "Acenocoumarol", prob: 0.0412 },
+      { name: "Dabigatran", prob: 0.0232 }
+    ],
+    rxcui: "11289",
+    rxnorm_status: "CONFIRMED",
+    threshold_status: "ACCEPTED"
+  }
+];
+
+let currentFile = null;
+
+// ── FILE INPUT ──────────────────────────────────────────────────────
+document.getElementById('file-input').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  handleFile(file);
+});
+
+// ── DRAG AND DROP ───────────────────────────────────────────────────
+const uploadCard = document.getElementById('upload-card');
+uploadCard.addEventListener('dragover', e => {
+  e.preventDefault();
+  uploadCard.classList.add('drag-over');
+});
+uploadCard.addEventListener('dragleave', () => uploadCard.classList.remove('drag-over'));
+uploadCard.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadCard.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) handleFile(file);
+});
+
+function handleFile(file) {
+  currentFile = file;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    document.getElementById('preview-img').src = e.target.result;
+    document.getElementById('preview-container').style.display = 'block';
+    document.getElementById('preview-label').textContent =
+      `${file.name} · ${(file.size / 1024).toFixed(1)} KB`;
+    document.getElementById('analyze-btn').style.display = 'block';
+  };
+  reader.readAsDataURL(file);
+}
+
+// ── ANALYSIS ────────────────────────────────────────────────────────
+async function runAnalysis() {
+  if (!currentFile) return;
+
+  document.getElementById('analyze-btn').disabled = true;
+  document.getElementById('loading-section').style.display = 'block';
+  document.getElementById('results-section').style.display = 'none';
+  document.getElementById('demo-note').style.display = 'none';
+
+  // Animate pipeline steps
+  const steps = ['ls-1','ls-2','ls-3','ls-4','ls-5'];
+  const delays = [0, 600, 1100, 1600, 2000];
+  steps.forEach((id, i) => {
+    setTimeout(() => {
+      if (i > 0) {
+        document.getElementById(steps[i-1]).classList.remove('active');
+        document.getElementById(steps[i-1]).classList.add('done');
+      }
+      document.getElementById(id).classList.add('active');
+    }, delays[i]);
+  });
+
+  try {
+    // Send image to Flask backend
+    const formData = new FormData();
+    formData.append('image', currentFile);
+
+    const response = await fetch('http://localhost:5000/predict', {
+      method: 'POST',
+      body: formData
+    });
+
+    const result = await response.json();
+
+    if (result.error) {
+      throw new Error(result.error);
+    }
+
+    // Finish animation
+    setTimeout(() => {
+      steps.forEach(id => {
+        document.getElementById(id).classList.remove('active');
+        document.getElementById(id).classList.add('done');
+      });
+      setTimeout(() => {
+        document.getElementById('loading-section').style.display = 'none';
+        showRealResults(result);
+      }, 400);
+    }, 2600);
+
+  } catch (err) {
+    document.getElementById('loading-section').style.display = 'none';
+    document.getElementById('analyze-btn').disabled = false;
+    alert('Error: ' + err.message + '\n\nMake sure the Flask server is running:\npython app.py');
+  }
+}
+
+function showResults() {
+  // Pick a random demo drug to simulate model output
+  const result = DEMO_DRUGS[Math.floor(Math.random() * DEMO_DRUGS.length)];
+
+  document.getElementById('results-section').style.display = 'block';
+  document.getElementById('demo-note').style.display = 'flex';
+  document.getElementById('reset-btn').style.display = 'inline-block';
+
+  // Drug name
+  document.getElementById('pred-drug-name').textContent = result.name;
+
+  // Confidence
+  const topProb = result.candidates[0].prob;
+  document.getElementById('conf-val-text').textContent = (topProb * 100).toFixed(2) + '%';
+  setTimeout(() => {
+    document.getElementById('conf-bar').style.width = (topProb * 100) + '%';
+  }, 100);
+
+  // Status chip
+  const isAccepted = result.threshold_status === 'ACCEPTED';
+  document.getElementById('pred-status-chip').innerHTML =
+    `<span class="status-chip ${isAccepted ? 'chip-accepted' : 'chip-uncertain'}">
+      ${isAccepted ? '✓ ACCEPTED' : '⚠ UNCERTAIN'}
+    </span>`;
+
+  // Threshold chip
+  document.getElementById('threshold-chip').innerHTML =
+    `<span class="status-chip ${isAccepted ? 'chip-accepted' : 'chip-uncertain'}">
+      ${isAccepted ? '✓ Above threshold' : '⚠ Below threshold'}
+    </span>`;
+
+  // RxNorm chip
+  const isConfirmed = result.rxnorm_status === 'CONFIRMED';
+  document.getElementById('rxnorm-chip').innerHTML =
+    `<span class="status-chip ${isConfirmed ? 'chip-confirmed' : 'chip-unconfirmed'}">
+      ${isConfirmed ? '✓ CONFIRMED' : '✗ UNCONFIRMED'}
+    </span>`;
+
+  // RxCUI
+  if (isConfirmed && result.rxcui) {
+    document.getElementById('rxcui-badge-container').innerHTML =
+      `<div class="rxcui-badge">🔗 RxCUI: ${result.rxcui}</div>`;
+    document.getElementById('canonical-name').textContent = result.name;
+  } else {
+    document.getElementById('rxcui-badge-container').innerHTML = '';
+    document.getElementById('canonical-name').textContent = 'Not verified';
+  }
+
+  // Candidates
+  const candList = document.getElementById('candidates-list');
+  candList.innerHTML = '';
+  result.candidates.forEach((c, i) => {
+    const pct = (c.prob * 100).toFixed(2);
+    const row = document.createElement('div');
+    row.className = 'candidate-row';
+    row.innerHTML = `
+      <span class="cand-rank">#${i+1}</span>
+      <span class="cand-name ${i===0?'top':''}">${c.name}</span>
+      <div class="cand-bar-bg">
+        <div class="cand-bar-fill" data-width="${c.prob*100}"></div>
+      </div>
+      <span class="cand-pct">${pct}%</span>
+    `;
+    candList.appendChild(row);
+  });
+
+  // Animate candidate bars
+  setTimeout(() => {
+    document.querySelectorAll('.cand-bar-fill').forEach(bar => {
+      bar.style.width = bar.dataset.width + '%';
+    });
+  }, 200);
+
+  // Pipeline trace
+  const pipelineSteps = [
+    { icon:'🖼️', name:'Image Preprocessing', detail:'Grayscale → Bilateral filter → 224×224 resize → [0,1] normalization' },
+    { icon:'🧠', name:'ResNet18 Feature Extraction', detail:'ImageNet pretrained backbone · Modified for 1-channel input' },
+    { icon:'📊', name:'Softmax Classification', detail:`393 drug name classes · Top prediction: ${result.name} (${(topProb*100).toFixed(1)}%)` },
+    { icon:'⚖️', name:'Confidence Threshold', detail:`Score ${(topProb*100).toFixed(2)}% ≥ threshold 0.1% → ${result.threshold_status}` },
+    { icon:'💊', name:'RxNorm API Validation', detail:`findRxcuiByString("${result.name}") → ${result.rxnorm_status}${result.rxcui ? ' · RxCUI: '+result.rxcui : ''}` },
+  ];
+
+  const stepsContainer = document.getElementById('pipeline-steps');
+  stepsContainer.innerHTML = '';
+  pipelineSteps.forEach((s, i) => {
+    if (i > 0) {
+      const connector = document.createElement('div');
+      connector.className = 'step-connector';
+      stepsContainer.appendChild(connector);
+    }
+    const step = document.createElement('div');
+    step.className = 'pipeline-step';
+    step.innerHTML = `
+      <div class="step-icon done">${s.icon}</div>
+      <div class="step-content">
+        <div class="step-name">${s.name}</div>
+        <div class="step-detail">${s.detail}</div>
+      </div>
+    `;
+    stepsContainer.appendChild(step);
+
+    setTimeout(() => step.classList.add('visible'), i * 120);
+  });
+
+  // Scroll to results
+  setTimeout(() => {
+    document.getElementById('results-section').scrollIntoView({ behavior:'smooth', block:'start' });
+  }, 300);
+}
+
+function showRealResults(result) {
+  document.getElementById('results-section').style.display = 'block';
+  document.getElementById('reset-btn').style.display = 'inline-block';
+
+  // Drug name
+  document.getElementById('pred-drug-name').textContent = result.predicted_drug;
+
+  // Confidence
+  const score = result.confidence_score * 100;
+  document.getElementById('conf-val-text').textContent = score.toFixed(2) + '%';
+  setTimeout(() => {
+    document.getElementById('conf-bar').style.width = Math.min(score, 100) + '%';
+  }, 100);
+
+  // Status chip
+  const isAccepted = result.threshold_status === 'ACCEPTED';
+  document.getElementById('pred-status-chip').innerHTML =
+    `<span class="status-chip ${isAccepted ? 'chip-accepted' : 'chip-uncertain'}">
+      ${isAccepted ? '✓ ACCEPTED' : '⚠ UNCERTAIN'}
+    </span>`;
+
+  // Threshold chip
+  document.getElementById('threshold-chip').innerHTML =
+    `<span class="status-chip ${isAccepted ? 'chip-accepted' : 'chip-uncertain'}">
+      ${isAccepted ? '✓ Above threshold' : '⚠ Below threshold'}
+    </span>`;
+
+  // RxNorm chip
+  const isConfirmed = result.rxnorm_status === 'CONFIRMED';
+  document.getElementById('rxnorm-chip').innerHTML =
+    `<span class="status-chip ${isConfirmed ? 'chip-confirmed' : 'chip-unconfirmed'}">
+      ${isConfirmed ? '✓ CONFIRMED' : '✗ UNCONFIRMED'}
+    </span>`;
+
+  // RxCUI
+  if (isConfirmed && result.rxcui) {
+    document.getElementById('rxcui-badge-container').innerHTML =
+      `<div class="rxcui-badge">🔗 RxCUI: ${result.rxcui}</div>`;
+    document.getElementById('canonical-name').textContent = result.canonical_name;
+  } else {
+    document.getElementById('rxcui-badge-container').innerHTML = '';
+    document.getElementById('canonical-name').textContent = 'Not verified';
+  }
+
+  // Top candidates
+  const candList = document.getElementById('candidates-list');
+  candList.innerHTML = '';
+  const maxProb = result.top_candidates[0].prob;
+  result.top_candidates.forEach((c, i) => {
+    const pct = (c.prob * 100).toFixed(2);
+    const barWidth = (c.prob / maxProb) * 100;
+    const row = document.createElement('div');
+    row.className = 'candidate-row';
+    row.innerHTML = `
+      <span class="cand-rank">#${i+1}</span>
+      <span class="cand-name ${i===0?'top':''}">${c.name}</span>
+      <div class="cand-bar-bg">
+        <div class="cand-bar-fill" data-width="${barWidth}"></div>
+      </div>
+      <span class="cand-pct">${pct}%</span>
+    `;
+    candList.appendChild(row);
+  });
+  setTimeout(() => {
+    document.querySelectorAll('.cand-bar-fill').forEach(bar => {
+      bar.style.width = bar.dataset.width + '%';
+    });
+  }, 200);
+
+  // Pipeline trace
+  const pipelineSteps = [
+    { icon:'🖼️', name:'Image Preprocessing',
+      detail:'Grayscale → Bilateral filter → 224×224 resize → [0,1] normalization' },
+    { icon:'🧠', name:'ResNet18 Feature Extraction',
+      detail:'ImageNet pretrained backbone · Modified for 1-channel input' },
+    { icon:'📊', name:'Softmax Classification',
+      detail:`393 classes · Top: ${result.predicted_drug} (${(result.confidence_score*100).toFixed(1)}%)` },
+    { icon:'⚖️', name:'Confidence Threshold',
+      detail:`Score ${(result.confidence_score*100).toFixed(4)}% ≥ threshold ${(result.threshold_used*100).toFixed(4)}% → ${result.threshold_status}` },
+    { icon:'💊', name:'RxNorm API Validation',
+      detail:`findRxcuiByString("${result.predicted_drug}") → ${result.rxnorm_status}${result.rxcui ? ' · RxCUI: '+result.rxcui : ''}` },
+  ];
+
+  const stepsContainer = document.getElementById('pipeline-steps');
+  stepsContainer.innerHTML = '';
+  pipelineSteps.forEach((s, i) => {
+    if (i > 0) {
+      const connector = document.createElement('div');
+      connector.className = 'step-connector';
+      stepsContainer.appendChild(connector);
+    }
+    const step = document.createElement('div');
+    step.className = 'pipeline-step';
+    step.innerHTML = `
+      <div class="step-icon done">${s.icon}</div>
+      <div class="step-content">
+        <div class="step-name">${s.name}</div>
+        <div class="step-detail">${s.detail}</div>
+      </div>
+    `;
+    stepsContainer.appendChild(step);
+    setTimeout(() => step.classList.add('visible'), i * 120);
+  });
+
+  setTimeout(() => {
+    document.getElementById('results-section')
+      .scrollIntoView({ behavior:'smooth', block:'start' });
+  }, 300);
+}
+
+// ── RESET ────────────────────────────────────────────────────────────
+function resetApp() {
+  currentFile = null;
+  document.getElementById('file-input').value = '';
+  document.getElementById('preview-container').style.display = 'none';
+  document.getElementById('preview-img').src = '';
+  document.getElementById('analyze-btn').style.display = 'none';
+  document.getElementById('analyze-btn').disabled = false;
+  document.getElementById('reset-btn').style.display = 'none';
+  document.getElementById('results-section').style.display = 'none';
+  document.getElementById('loading-section').style.display = 'none';
+  document.getElementById('demo-note').style.display = 'none';
+  document.getElementById('conf-bar').style.width = '0%';
+
+  // Reset loading steps
+  ['ls-1','ls-2','ls-3','ls-4','ls-5'].forEach(id => {
+    const el = document.getElementById(id);
+    el.classList.remove('active','done');
+  });
+
+  window.scrollTo({ top:0, behavior:'smooth' });
+}
+</script>
+</body>
+</html>
