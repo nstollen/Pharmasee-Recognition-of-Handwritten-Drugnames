@@ -26,10 +26,5 @@ env/
 .DS_Store
 Thumbs.db
 
-# Project specific
-*.pt
-models/phase*_weights.pt
-optimal_threshold.txt
-
 # Local config
 .claude/settings.local.json
