@@ -278,7 +278,9 @@ This project is provided as-is for research and educational purposes.
 
 ## Authors
 
-Gabriel Matsumoto
+Gabriel James M. Gulmatico
+Edwin Carl Jr. demonteverde
+Genesis B. Makabenta
 
 ---
 
